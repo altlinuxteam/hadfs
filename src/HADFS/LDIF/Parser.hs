@@ -19,7 +19,7 @@ parse ldif = case parseOnly ldifP' ldif of
 
 
 toVal :: [AttrIR] -> Attrs
-toVal = foldr (\(AttrIR (k, v)) m -> m <> (Attrs (M.singleton (Key (encodeUtf8 k)) (mkVals [v])))) (Attrs M.empty)
+toVal = foldr (\(AttrIR (k, v)) m -> m <> Attrs (M.singleton (Key (encodeUtf8 k)) (mkVals [v]))) (Attrs M.empty)
 
 convert :: [RecordIR] -> [Record]
 convert = map (\(RecordIR (dn, attrs)) -> Record (DN (encodeUtf8 dn), toVal attrs))
@@ -27,8 +27,7 @@ convert = map (\(RecordIR (dn, attrs)) -> Record (DN (encodeUtf8 dn), toVal attr
 ldifP' :: Parser [RecordIR]
 ldifP' = do
   skipTrash
-  recs <- many1 recordP
-  return $ recs
+  many1 recordP
 
 recordP :: Parser RecordIR
 recordP = do
@@ -66,33 +65,28 @@ keyP = do
   return $ cons first rest
 
 valP :: Parser Val
-valP = do
-  v <- choice [textVal, base64Val]
-  return v
+valP = choice [textVal, base64Val]
 
 textVal :: Parser Val
 textVal = do
   string ": "
-  v <- val'
-  return $ Plain (encodeUtf8 v)
+  Plain . encodeUtf8 <$> val'
 
 base64Val :: Parser Val
 base64Val = do
   string ":: "
-  v <- val'
-  return $ Base64 (encodeUtf8 v)
+  Base64 . encodeUtf8 <$> val'
 
 val' :: Parser Text
 val' = do
   v <- takeTill isEol
   rs <- option "" rest
-  return $ (v `append` rs)
+  return (v `append` rs)
   where rest :: Parser Text
         rest = do
           string "\n "
           skipWhile (==' ')
-          r <- takeTill isEol
-          return r
+          takeTill isEol
 
 comment :: Parser ()
 comment = do

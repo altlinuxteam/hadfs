@@ -15,7 +15,7 @@ fromLDIF :: Text -> Either String [Record]
 fromLDIF = parse
 
 cmp :: Record -> Record -> ModOp
-cmp (Record ((DN oldDN), oldAttrs)) (Record ((DN newDN), newAttrs)) | oldDN == "new record" = CreateRec (DN newDN) newAttrs
+cmp (Record (DN oldDN, oldAttrs)) (Record (DN newDN, newAttrs)) | oldDN == "new record" = CreateRec (DN newDN) newAttrs
                                                                     | otherwise = ModifyRec (DN oldDN) (cmpAttrs oldAttrs newAttrs)
 
 cmpVals :: Vals -> Vals -> (ValsOp, ValsOp)
@@ -38,35 +38,35 @@ cmpAttrs (Attrs old) (Attrs new) =
                                  LT -> Modify $ normValOps [add, del]
                                  _ -> Replace b
         ) old new
-  in M.toList $ addAttrs <> delAttrs <> (M.mapMaybe id modAttrs)
+  in M.toList $ addAttrs <> delAttrs <> M.mapMaybe id modAttrs
 
 normValOps :: [ValsOp] -> [ValsOp]
 normValOps = filter (not . isEmpty)
   where isEmpty :: ValsOp -> Bool
-        isEmpty (AddVals    (Vals vs)) = (vs == S.empty)
-        isEmpty (DeleteVals (Vals vs)) = (vs == S.empty)
+        isEmpty (AddVals    (Vals vs)) = vs == S.empty
+        isEmpty (DeleteVals (Vals vs)) = vs == S.empty
 
 modopsToLDIF :: [ModOp] -> Text
-modopsToLDIF = T.unlines . concat . (intersperse [""]) . (map modopToLDIF)
+modopsToLDIF = T.unlines . intercalate [""] . (map modopToLDIF)
 
 modopToLDIF :: ModOp -> [Text]
 modopToLDIF (CreateRec (DN dn) (Attrs attrs)) = [T.pack $ show attrs] --["dn: " <> T.decodeUtf8 dn] <> (M.map (\(k, vs) -> (k, map valToLDIF vs)) attrs)
 modopToLDIF (ModifyRec (DN dn) aops)  = ["dn: " <> T.decodeUtf8 dn] <> aopsToLDIF aops
 
 aopsToLDIF :: [(Key, AttrsOp)] -> [Text]
-aopsToLDIF ops = ["changetype: modify"] <> (concat $ intersperse ["-"] $ map (uncurry aopToLDIF) ops)
+aopsToLDIF ops = ["changetype: modify"] <> concat (intersperse ["-"] $ map (uncurry aopToLDIF) ops)
 
 aopToLDIF :: Key -> AttrsOp -> [Text]
 aopToLDIF key         (Add     vals) = vopsToLDIF key (AddVals vals)
 aopToLDIF (Key k)     (Delete  _   ) = ["delete: "  <> T.decodeUtf8 k]
-aopToLDIF key         (Modify  vops) = concat (map (vopsToLDIF key) vops)
+aopToLDIF key         (Modify  vops) = concatMap (vopsToLDIF key) vops
 aopToLDIF key@(Key k) (Replace vals) = ["replace: " <> T.decodeUtf8 k] <> attrToLDIF key vals
 
 attrToLDIF :: Key -> Vals -> [Text]
 attrToLDIF k (Vals vs) = map (valToLDIF k) $ S.toList vs
 
 attrsToLDIF :: Attrs -> [Text]
-attrsToLDIF (Attrs attrs) = concat $ map (\(k,vs) -> attrToLDIF k vs) $ M.toList attrs
+attrsToLDIF (Attrs attrs) = concatMap (uncurry attrToLDIF) $ M.toList attrs
 
 valToLDIF :: Key -> Val -> Text
 valToLDIF k (Plain  v) = T.decodeUtf8 $ BS.concat [unKey k, ": ",  v]

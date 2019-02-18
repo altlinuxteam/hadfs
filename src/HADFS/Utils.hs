@@ -38,7 +38,7 @@ getAuthority :: Get Authority
 getAuthority = do
   d <- getByteString 6
   let auth = sum $ map (\(n, b) -> fromIntegral (b `shiftR` n)) $ zip [0,8..] (reverse (BS.unpack d))
-  return $ Authority $ auth
+  return $ Authority auth
 
 getRID :: Get RID
 getRID = do
@@ -58,54 +58,51 @@ parseSID' = do
             return $ ObjectSID (fromIntegral r) (fromIntegral s) a rs
 
 parseSID :: BL.ByteString -> ObjectSID
-parseSID bs = runGet parseSID' bs
+parseSID = runGet parseSID'
 
 sid2str :: String -> String
 sid2str s = show $ parseSID $ BL.pack s
 
 parseGUID :: BL.ByteString -> ObjectGUID
-parseGUID bs = runGet parseGUID' bs
+parseGUID = runGet parseGUID'
 
 parseGUID' :: Get ObjectGUID
 parseGUID' = do
   empty <- isEmpty
   if empty
     then return $ ObjectGUID 0 0 0 0
-    else do f1 <- getWord32le
-            f2 <- getWord16le
-            f3 <- getWord16le
-            f4 <- getWord64be
-            return $ ObjectGUID f1 f2 f3 f4
+    else ObjectGUID <$> getWord32le
+                    <*> getWord16le
+                    <*> getWord16le
+                    <*> getWord64be
 
 guid2str :: String -> String
 guid2str s = show $ parseGUID $ BL.pack s
 
 
 encodeIfNeeded :: String -> String
-encodeIfNeeded s | (all isPrint) s = ": " ++ s
-                 | otherwise = ":: " ++ (BC.unpack $ encode $ BC.pack s)
+encodeIfNeeded s | all isPrint s = ": " ++ s
+                 | otherwise = ":: " ++ BC.unpack (encode $ BC.pack s)
 
 toStrings :: String -> [String] -> String
-toStrings k vs | k == "objectGUID" = unlines $ [k ++ ": " ++ guid2str (head vs)]
-               | k == "objectSid" = unlines $ [k ++ ": " ++ sid2str (head vs)]
+toStrings k vs | k == "objectGUID" = unlines [k ++ ": " ++ guid2str (head vs)]
+               | k == "objectSid" = unlines [k ++ ": " ++ sid2str (head vs)]
                | otherwise = unlines $ fmap (\v -> k ++ encodeIfNeeded v) vs
 
 e2le :: String -> [Entry] -> LDAPEntry
-e2le dn e = LDAPEntry dn e
+e2le = LDAPEntry
 
 toRecords' :: String -> [Entry] -> [Record]
-toRecords' dn e  = toRecords $ [e2le dn e]
+toRecords' dn e  = toRecords [e2le dn e]
 
 toRecords :: [LDAPEntry] -> [Record]
 toRecords = map entry2record
 
 entry2record :: LDAPEntry -> Record
-entry2record (LDAPEntry ledn leattrs) = Record ((DN (BC.pack ledn)), (l2a leattrs))
+entry2record (LDAPEntry ledn leattrs) = Record (DN (BC.pack ledn), l2a leattrs)
   where l2a :: [(String, [String])] -> Attrs
-        l2a as = Attrs $ M.fromList $ map (\(k,v) -> ((Key (BC.pack k)), (mkVals (map attr2val v)))) as
-        attr2val a = case (all isPrint) a of
-          True -> Plain $ BC.pack a
-          False -> Base64 $ encode $ BC.pack a
+        l2a as = Attrs $ M.fromList $ map (\(k,v) -> (Key (BC.pack k), mkVals (map attr2val v))) as
+        attr2val a = if all isPrint a then Plain $ BC.pack a else Base64 $ encode $ BC.pack a
 
 data Severity
   = ERROR
@@ -116,10 +113,10 @@ data Severity
   deriving (Eq, Show, Enum)
 
 writeLog :: Severity -> String -> IO ()
-writeLog s m = putStrLn $ "[" ++ (show s) ++ "] " ++ m
+writeLog s m = putStrLn $ "[" ++ show s ++ "] " ++ m
 
 traceLog :: String -> IO ()
-traceLog m = writeLog TRACE m
+traceLog = writeLog TRACE
 
 modopToLDAPMod :: ModOp -> (String, [LDAPMod])
 modopToLDAPMod (CreateRec (DN dn) (Attrs attrs)) =
@@ -127,7 +124,7 @@ modopToLDAPMod (CreateRec (DN dn) (Attrs attrs)) =
   ,M.foldrWithKey (
       \k (Vals vs) b -> b <> [LDAPMod LdapModAdd (BC.unpack (unKey k)) (map valToBinString (S.toList vs))]
       ) [] attrs)
-modopToLDAPMod (ModifyRec (DN dn) aops) = (BC.unpack dn, concat (map (\(k, vs) -> aopToLDAPMod k vs) aops))
+modopToLDAPMod (ModifyRec (DN dn) aops) = (BC.unpack dn, concatMap (uncurry aopToLDAPMod) aops)
 
 aopToLDAPMod :: Key -> AttrsOp -> [LDAPMod]
 aopToLDAPMod k (Add     vals) = [vopToLDAPMod k (AddVals vals)]

@@ -252,7 +252,7 @@ changeUserPassword State{..} path _ content offset | content == BS.empty = do
 
 writeAttrs :: State -> FilePath -> HT -> ByteString -> FileOffset -> IO (Either Errno ByteCount)
 writeAttrs st@State{..} path _ content offset = do
-  traceLog $ "write attributes to:" ++ path ++ " with offset: " ++ (show offset) ++ " content: " ++ (show content)
+  traceLog $ "write attributes to:" ++ path ++ " with offset: " ++ show offset ++ " content: " ++ show content
   oldCont <- BS.readFile cachePath
 --  traceLog $ show $ fromLDIF (T.decodeUtf8 oldCont)
 --  traceLog $ show $ fromLDIF (T.decodeUtf8 content)
@@ -262,7 +262,7 @@ writeAttrs st@State{..} path _ content offset = do
       newRec = case offset of
                  0 -> head $ fromRight [] $ fromLDIF (T.decodeUtf8 content)
                  x -> head $ fromRight [] $ fromLDIF (T.decodeUtf8 (
-                                                     (BS.take (fromIntegral offset) oldCont) `BS.append` content `BS.append` (BS.drop ((fromIntegral offset) + contentLength) oldCont))
+                                                     BS.take (fromIntegral offset) oldCont `BS.append` content `BS.append` BS.drop (fromIntegral offset + contentLength) oldCont)
                                                      )
       modOp = cmp oldRec newRec
 --  traceLog $ "oldRec: " ++ (show oldRec)

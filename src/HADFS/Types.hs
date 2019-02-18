@@ -15,7 +15,7 @@ data ObjectSID =
            }
   deriving (Eq)
 instance Show ObjectSID where
-  show (ObjectSID r _ (Authority a) rs) = "S-" ++ show r ++ "-" ++ show a ++ concat (map (\(RID x) -> "-" ++ show x) rs)
+  show (ObjectSID r _ (Authority a) rs) = "S-" ++ show r ++ "-" ++ show a ++ concatMap (\(RID x) -> "-" ++ show x) rs
 
 data ObjectGUID =
   ObjectGUID{ f1 :: Word32
@@ -25,7 +25,7 @@ data ObjectGUID =
             }
   deriving (Eq)
 instance Show ObjectGUID where
-  show (ObjectGUID f1 f2 f3 f4) = (showHex f1) "-" ++ showHex f2 "-" ++ showHex f3 "-" ++ f4_1 ++ "-" ++ f4_2
-    where f4_h = showHex f4 ""
+  show (ObjectGUID f1' f2' f3' f4') = showHex f1' "-" ++ showHex f2' "-" ++ showHex f3' "-" ++ f4_1 ++ "-" ++ f4_2
+    where f4_h = showHex f4' ""
           f4_1 = take 4 f4_h
           f4_2 = drop 4 f4_h

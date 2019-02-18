@@ -1,7 +1,4 @@
-{-# LANGUAGE
-OverloadedStrings,
-GeneralizedNewtypeDeriving
-#-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module HADFS.LDIF.Types where
 import Data.String (IsString(..))
 import Data.Map (Map)
@@ -51,8 +48,3 @@ mkVals = Vals <$> S.fromList
 
 mkAttrs :: [(Key, Vals)] -> Attrs
 mkAttrs = Attrs <$> M.fromList
-
-{--
-mkModOp :: DN -> [(Key, AttrsOp)] -> ModOp
-mkModOp dn aops = ModOp (dn, aops)
---}

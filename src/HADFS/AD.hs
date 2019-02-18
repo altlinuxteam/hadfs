@@ -4,7 +4,6 @@ module HADFS.AD where
 
 import HADFS.AD.Types
 import LDAP
-import HADFS.LDIF.Types (Record, Attrs, DN(..))
 import Data.Text (Text, intercalate, splitOn, pack, unpack, replace)
 import Data.Text.Encoding
 import qualified Data.Text as T
@@ -23,7 +22,7 @@ toObjCat :: String -> ObjectCategory
 toObjCat "CN=Person" = Person
 toObjCat _ = Default
 
-getObjCat :: AD -> FilePath -> IO (ObjectCategory)
+getObjCat :: AD -> FilePath -> IO ObjectCategory
 getObjCat ad path = do
   attrs <- nodeAttrs ad path ["objectCategory"]
   case getAttr "objectCategory" attrs of
@@ -33,9 +32,7 @@ getObjCat ad path = do
 addRealm :: AD -> DN -> DN
 addRealm AD{..} (DN "") = realmDN
 addRealm AD{..} dn =
-  case T.isSuffixOf rdn dn' of
-    True -> dn
-    _ -> DN $ encodeUtf8 $ intercalate "," [dn', rdn]
+  if T.isSuffixOf rdn dn' then dn else DN $ encodeUtf8 $ intercalate "," [dn', rdn]
   where rdn = fromDN realmDN
         dn' = fromDN dn
 
@@ -53,7 +50,7 @@ fromPath = DN . encodeUtf8 . intercalate "," . reverse . filter (/= "") . splitO
 realm2dn :: Text -> DN
 realm2dn r = DN $ encodeUtf8 $ T.concat ["DC=", replace "." ",DC=" r]
 
-init :: Text -> IO (AD)
+init :: Text -> IO AD
 init realm = do
   ldap <- ldapInit "dc0.domain.alt" 389
   ldapGSSAPISaslBind ldap
@@ -65,7 +62,7 @@ getAttr s ss =
     Just x -> Just $ snd x
     _ -> Nothing
 
-nodeAttrs :: AD -> FilePath -> [String] -> IO ([Entry])
+nodeAttrs :: AD -> FilePath -> [String] -> IO [Entry]
 nodeAttrs ad path attrs = do
   res <- ldapSearch (ldap ad) (Just dn) LdapScopeBase Nothing (LDAPAttrList attrs) True
   case res of
@@ -73,7 +70,7 @@ nodeAttrs ad path attrs = do
     _  -> return $ leattrs $ head res
   where dn = unpack . fromDN $ addRealm ad $ fromPath path
 
-nodesAt :: AD -> FilePath -> IO ([Node])
+nodesAt :: AD -> FilePath -> IO [Node]
 nodesAt ad path = do
 --  res <- ldapSearch (ldap ad) (Just dn) LdapScopeOnelevel Nothing LDAPNoAttrs True
   res <- ldapSearch (ldap ad) (Just dn) LdapScopeOnelevel Nothing (LDAPAttrList ["objectCategory"]) True
@@ -93,7 +90,7 @@ deleteNode ad path = ldapDelete (ldap ad) dn
 path2dn :: AD -> FilePath -> String
 path2dn ad path = unpack . fromDN $ addRealm ad $ fromPath path
 
-nodeRec :: AD -> FilePath -> [String] -> IO (Record)
+nodeRec :: AD -> FilePath -> [String] -> IO Record
 nodeRec ad path attrs = do
   res <- ldapSearch (ldap ad) (Just dn) LdapScopeBase Nothing (LDAPAttrList attrs) True
   return $ entry2record $ head res
@@ -106,7 +103,7 @@ children ad path = do
   where dn = unpack . fromDN $ addRealm ad $ fromPath path
         objCat x = lastElem $ head $ fromJust $ getAttr "objectCategory" $ leattrs x
 
-search :: AD -> FilePath -> Text -> IO ([Record])
+search :: AD -> FilePath -> Text -> IO [Record]
 search ad path req = do
   res <- ldapSearch (ldap ad) (Just dn) LdapScopeSubtree (Just filter) (LDAPAttrList attrs) False
   return $ map entry2record res
@@ -114,11 +111,11 @@ search ad path req = do
         (filter:attrs) = (words . T.unpack) req
 
 modify :: AD -> [ModOp] -> IO ()
-modify ad mods = do
+modify ad mods =
   mapM_ (\(dn, ops) -> do
-            traceLog $ "modify: " ++ dn ++ "\n" ++ (show ops)
-            ldapModify (ldap ad) dn ops
-        ) ldapmod
+          traceLog $ "modify: " ++ dn ++ "\n" ++ show ops
+          ldapModify (ldap ad) dn ops
+      ) ldapmod
   where ldapmod = map modopToLDAPMod mods
 
 moveNode :: AD -> FilePath -> FilePath -> IO ()
@@ -132,22 +129,22 @@ moveNode ad from to = do
 
 setPass :: AD -> FilePath -> Text -> IO ()
 setPass ad path pass = do
-  traceLog $ "set pass: " ++ (show pass)
+  traceLog $ "set pass: " ++ show pass
   ldapModify (ldap ad) dn [LDAPMod LdapModReplace "unicodePwd" [encodedPass]]
   where dn = unpack . fromDN $ addRealm ad $ fromPath path
         quotedPass = "\"" `T.append` pass `T.append` "\""
         encodedPass = (BS.unpack . encodeUtf16LE) quotedPass
 
 add :: AD -> [ModOp] -> IO ()
-add ad mods = do
+add ad mods =
   mapM_ (\(dn, ops) -> do
-            traceLog $ "create: " ++ dn ++ "\n" ++ (show ops)
-            ldapAdd (ldap ad) dn ops
-        ) ldapmod
+          traceLog $ "create: " ++ dn ++ "\n" ++ show ops
+          ldapAdd (ldap ad) dn ops
+      ) ldapmod
   where ldapmod = map (modopToLDAPMod . filterFields) mods
 
 filterFields :: ModOp -> ModOp
-filterFields mop@(CreateRec _ (Attrs attrs)) = mop{ attrs = Attrs (M.filterWithKey (\k _ -> notElem k restrictedKeys) attrs)}
+filterFields mop@(CreateRec _ (Attrs attrs)) = mop{ attrs = Attrs (M.filterWithKey (\k _ -> k `notElem` restrictedKeys) attrs)}
 filterFields mop@(ModifyRec _ kops) = undefined
 
 linkedFields :: [Key]
