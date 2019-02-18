@@ -1,0 +1,7 @@
+.stack-work/
+hadfs.cabal
+*~
+*#
+*_flymake.hs
+.cache*/
+mnt/*
