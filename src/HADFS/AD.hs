@@ -50,11 +50,11 @@ fromPath = DN . encodeUtf8 . intercalate "," . reverse . filter (/= "") . splitO
 realm2dn :: Text -> DN
 realm2dn r = DN $ encodeUtf8 $ T.concat ["DC=", replace "." ",DC=" r]
 
-init :: Text -> IO AD
-init realm = do
-  ldap <- ldapInit "dc0.domain.alt" 389
+initAD :: String -> String -> Int -> IO AD
+initAD realm host port = do
+  ldap <- ldapInit host (fromIntegral port)
   ldapGSSAPISaslBind ldap
-  return $ AD ldap (realm2dn realm)
+  return $ AD ldap (realm2dn $ T.pack realm)
 
 getAttr :: String -> [Entry] -> Maybe [String]
 getAttr s ss =

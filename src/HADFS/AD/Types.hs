@@ -7,6 +7,12 @@ data AD = AD {ldap :: LDAP, realmDN :: DN} deriving (Eq, Show)
 type Entry = (String, [String])
 type Node = (String, String)
 
+data ADCtx = ADCtx{ ldapHost :: !String
+                  , ldapPort :: !Int
+                  }
+  deriving (Eq, Show)
+
+
 data ObjectCategory
   = Person
   | Default

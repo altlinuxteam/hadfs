@@ -1,11 +1,15 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances #-}
 module HADFS.FS where
 
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString as BS
+import Control.Concurrent.STM.TVar
+import Control.Monad.STM
 import Control.Monad
+import Control.Monad.Reader
 import Foreign.C.Error
 import System.PosixCompat.Types
 import System.PosixCompat.Files
@@ -34,22 +38,63 @@ type HT = ()
 
 type FSMap = M.Map FilePath FileStat
 
-data State =
-  State{ ad :: AD
-       , tmp :: FilePath
-       }
-  deriving (Show)
+type FSError = (Errno, String)
 
-init :: FilePath -> IO ()
-init mp = do
+noErr :: FSError
+noErr = (eOK, "")
+
+type App = ReaderT State IO
+type Logger = (String -> IO ())
+instance Show Logger where
+  show _ = "Logger func"
+
+data Config = Config{adHost     :: !String
+                    ,adPort     :: !Int
+                    ,adRealm    :: !String
+                    ,mountpoint :: !FilePath
+                    ,cachePath  :: !FilePath
+                    ,logF       :: !Logger
+                    }
+  deriving Show
+
+data State = State {config :: !Config
+                   ,ad :: !AD
+                   ,lastError :: TVar FSError
+                   ,tmp :: FilePath
+                   }
+  deriving Show
+instance Show (TVar FSError) where
+  show _ = "FSError"
+
+init :: Config -> IO ()
+init conf = do
   let prog = "hadfs"
-  putStrLn "Initialize AD..."
-  ad <- HADFS.AD.init "domain.alt"
+      mp = mountpoint conf
+      cache = cachePath conf
+      host = adHost conf
+      port = adPort conf
+      realm = adRealm conf
+      log = logF conf
+      cacheDir = cache </> ".cache-" ++ host
+      lePath = cacheDir </> ".lasterror"
+
+  log "Initialize AD..."
+  ad <- HADFS.AD.initAD realm host port
   cwd <- getCurrentDirectory
-  let tmp = cwd </> ".cache"
-  createDirectoryIfMissing False tmp
-  writeFile (tmp </> ".dummy") ""
-  fuseRun prog [mp,"-o", "default_permissions,auto_unmount", "-f", "-o", "subtype=dc0.domain.alt"] (adFSOps (State ad tmp)) defaultExceptionHandler
+  errorState <- newTVarIO (eOK, "")
+  log $ "Create cache directory: " ++ cacheDir
+  createDirectoryIfMissing False cacheDir
+  log "Populate cache"
+  writeFile (cacheDir </> ".dummy") ""
+  writeFile lePath "bebebe"
+  fuseRun prog [mp,"-o", "default_permissions,auto_unmount", "-f", "-o", "subtype=" ++ host] (adFSOps (State conf ad errorState cacheDir)) (exceptionHandler errorState lePath)
+
+exceptionHandler :: TVar FSError -> FilePath -> (SomeException -> IO Errno)
+exceptionHandler lerr lePath e = do
+  print e
+  atomically $ writeTVar lerr (eFAULT, show e)
+  writeFile lePath (show e)
+  return eFAULT
 
 adFSOps :: State -> FuseOperations HT
 adFSOps s = defaultFuseOps { fuseGetFileStat = getFileStat s
@@ -77,8 +122,11 @@ getFileStat State{..} path | takeFileName path == ".refresh" = do
                                status <- getFileStatus (tmp </> ".dummy")
                                return $ Right $ fromStatus status
 getFileStat State{..} path =
-  fileExist cachePath >>= \x -> if x then do status <- getFileStatus cachePath
-                                             return $ Right $ fromStatus status else return $ Left eNOENT
+  doesPathExist cachePath >>= \x ->
+  if x then do
+    status <- getFileStatus cachePath
+    return $ Right $ fromStatus status
+  else return $ Left eNOENT
   where cachePath = tmp </> tail path
 
 openD State{..} "/" = return eOK
@@ -100,7 +148,7 @@ refreshHooks st@State{..} Default path = do
 --  attrs <- nodeAttrs ad path ["*", "+", "nTSecurityDescriptor"]
   record <- nodeRec ad path ["*", "+"]
   let hooks = [(cachePath </> ".attributes", T.unpack (recordToLDIF record))
-              ]
+              ] <> if path == "/" then [(cachePath </> ".lasterror", "")] else []
   mapM_ (uncurry createIfNotDeleted) hooks
   where cachePath = tmp </> tail path
 
@@ -157,12 +205,15 @@ openF State{..} path mode flags = return $ Right ()
 readF :: State -> FilePath -> HT -> ByteCount -> FileOffset -> IO (Either Errno B.ByteString)
 readF st@State{..} path _ byteCount offset = do
   putStrLn $ "read file:" ++ path
+  content <- B.readFile (tmp </> tail path)
+  return $ Right content
+{--
   withFile (tmp </> tail path) ReadMode
     (\fh -> do
         content <- B.hGetContents fh
         return $ Right content
     )
-
+--}
 getFileSystemStats :: State -> String -> IO (Either Errno FileSystemStats)
 getFileSystemStats State{..} str =
   return $ Right $ FileSystemStats
