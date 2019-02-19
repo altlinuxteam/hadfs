@@ -87,6 +87,8 @@ init conf = do
   log "Populate cache"
   writeFile (cacheDir </> ".dummy") ""
   writeFile lePath "bebebe"
+  createDirectoryIfMissing False (cacheDir </> "CN=Configuration")
+  createDirectoryIfMissing False (cacheDir </> "CN=Schema,CN=Configuration")
   fuseRun prog [mp,"-o", "default_permissions,auto_unmount", "-f", "-o", "subtype=" ++ host] (adFSOps (State conf ad errorState cacheDir)) (exceptionHandler errorState lePath)
 
 exceptionHandler :: TVar FSError -> FilePath -> (SomeException -> IO Errno)
