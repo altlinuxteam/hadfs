@@ -89,7 +89,7 @@ init conf = do
   writeFile lePath "bebebe"
   createDirectoryIfMissing False (cacheDir </> "CN=Configuration")
   createDirectoryIfMissing False (cacheDir </> "CN=Schema,CN=Configuration")
-  fuseRun prog [mp,"-o", "default_permissions,auto_unmount", "-f", "-o", "subtype=" ++ host] (adFSOps (State conf ad errorState cacheDir)) (exceptionHandler errorState lePath)
+  fuseRun prog [mp,"-f", "-o", "default_permissions,auto_unmount","-o", "fsname=" ++ prog, "-o", "subtype=" ++ host] (adFSOps (State conf ad errorState cacheDir)) (exceptionHandler errorState lePath)
 
 exceptionHandler :: TVar FSError -> FilePath -> (SomeException -> IO Errno)
 exceptionHandler lerr lePath e = do
