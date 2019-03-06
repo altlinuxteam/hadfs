@@ -38,6 +38,9 @@ data ObjectCategory
   | Default
   deriving (Eq, Show)
 
+data AttrWriteMode = LdifMode
+                   | JsonMode
+
 noErr :: FSError
 noErr = (eOK, "")
 
@@ -127,7 +130,7 @@ refreshHooks st@State{..} Default path = do
 --  attrs <- nodeAttrs ad path ["*", "+", "nTSecurityDescriptor"]
   record <- recordOf ad path
   let hooks = [(cachePath </> ".attributes", T.unpack (unTagged $ toLdif [record]))
-              ,(cachePath </> ".attributes.json", T.unpack (toJsonPP [record]))
+              ,(cachePath </> ".attributes.json", T.unpack (toJsonPP record))
               ] <> if path == "/" then [(cachePath </> ".lasterror", "")] else []
   mapM_ (uncurry createIfNotDeleted) hooks
   where cachePath = tmp </> tail path
@@ -259,7 +262,8 @@ setFSize st@State{..} path offset | takeFileName path == ".refresh" = cleanCache
                                       return eOK
 
 write :: State -> FilePath -> HT -> ByteString -> FileOffset -> IO (Either Errno ByteCount)
-write st@State{..} path _ content offset | takeFileName path == ".attributes" = writeAttrs st path () content offset
+write st@State{..} path _ content offset | takeFileName path == ".attributes" = writeAttrs st path () content offset LdifMode
+                                         | takeFileName path == ".attributes.json" = writeAttrs st path () content offset JsonMode
                                          | takeFileName path == ".refresh" = return $ Right $ fromIntegral $ BS.length content
                                          | takeFileName path == ".chpwd" = changeUserPassword st path () content offset
                                          | ".search" `isPrefixOf` takeFileName path = searchHandler st path () content offset
@@ -272,24 +276,27 @@ changeUserPassword State{..} path _ content offset | content == BS.empty = do
                                                        adSetUserPass ad (path2dn ad . takeDirectory $ path) (T.decodeUtf8 content)
                                                        return $ Right $ fromIntegral $ BS.length content
 
-writeAttrs :: State -> FilePath -> HT -> ByteString -> FileOffset -> IO (Either Errno ByteCount)
-writeAttrs st@State{..} path _ content offset = do
+writeAttrs :: State -> FilePath -> HT -> ByteString -> FileOffset -> AttrWriteMode -> IO (Either Errno ByteCount)
+writeAttrs st@State{..} path _ content offset mode = do
   oldCont <- BS.readFile cachePath
   putStrLn $ show oldCont
   putStrLn $ show content
-  let old = head $ fromLdifBS ad oldCont
+  let old = head $ toRecFunc oldCont
       new = head $ case offset of
-                     0 -> fromLdifBS ad content
-                     x -> fromLdifBS ad $ BS.take (fromIntegral offset) oldCont <> content <> BS.drop (fromIntegral offset + contentLength) oldCont
+                     0 -> toRecFunc content
+                     x -> toRecFunc $ BS.take (fromIntegral offset) oldCont <> content <> BS.drop (fromIntegral offset + contentLength) oldCont
       contentLength = fromIntegral $ BS.length content
       modOps = cmp old new
   if oldCont == BS.empty
     then newRec ad $ new {dn = path2dn ad nodePath}
     else modRec ad modOps
-  removeFile $ cachePath -- it's really needed?
+--  removeFile $ cachePath -- is it really needed?
   return $ Right $ fromIntegral $ BS.length content
   where cachePath = tmp </> tail path
         nodePath = tmp </> takeDirectory path
+        toRecFunc = case mode of
+                      LdifMode -> fromLdifBS ad
+                      JsonMode -> (:[]) . fromJson . T.decodeUtf8
 
 mkdir :: State -> FilePath -> FileMode -> IO Errno
 mkdir st@State{..} path mode = do
