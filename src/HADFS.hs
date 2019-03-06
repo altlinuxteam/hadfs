@@ -127,6 +127,7 @@ refreshHooks st@State{..} Default path = do
 --  attrs <- nodeAttrs ad path ["*", "+", "nTSecurityDescriptor"]
   record <- recordOf ad path
   let hooks = [(cachePath </> ".attributes", T.unpack (unTagged $ toLdif [record]))
+              ,(cachePath </> ".attributes.json", T.unpack (toJsonPP [record]))
               ] <> if path == "/" then [(cachePath </> ".lasterror", "")] else []
   mapM_ (uncurry createIfNotDeleted) hooks
   where cachePath = tmp </> tail path

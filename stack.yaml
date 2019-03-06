@@ -44,7 +44,7 @@ extra-deps:
 - github: omgbebebe/hfuse
   commit: 5224e75d42796d52287b3e1517b80113990933eb
 - github: omgbebebe/adldap
-  commit: fe88b16b86efdb057028cc5ff8aaae949adf4b9e
+  commit: 0312cf3a7d3a718a034a38d7c5b79589747b600a
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
