@@ -57,6 +57,7 @@ hadfsInit realm host port mountpoint cacheDir logF = do
   errorState <- newTVarIO (eOK, "")
   let st = State ad putStrLn errorState cacheDir
       lePath = cacheDir </> ".lasterror"
+      prog = "hadfs"
 
   createDirectoryIfMissing False cacheDir
   writeFile (cacheDir </> ".dummy") ""
@@ -64,7 +65,7 @@ hadfsInit realm host port mountpoint cacheDir logF = do
   createDirectoryIfMissing False (cacheDir </> "CN=Configuration")
   createDirectoryIfMissing False (cacheDir </> "CN=Schema,CN=Configuration")
 
-  fuseRun "hadfs" ["./mnt", "-o", "default_permissions,auto_unmount", "-f", "-o", "subtype=" ++ host] (adFSOps st) (exceptionHandler errorState lePath)
+  fuseRun prog ["./mnt", "-o", "default_permissions,auto_unmount", "-f", "-o", "subtype=" ++ host, "-o", "fsname=" ++ prog] (adFSOps st) (exceptionHandler errorState lePath)
   where realm' = T.pack realm
 
 adFSOps :: State -> FuseOperations HT
