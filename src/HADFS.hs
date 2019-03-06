@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -8,6 +9,7 @@ import ADLDAP.Types
 import ADLDAP.Utils
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BC
 --import Control.Monad.Reader
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -140,12 +142,17 @@ createIfNotDeleted path content = do
 refresh :: State -> FilePath -> IO ()
 refresh st@State{..} path = do
   chs <- childrenOf' ad path
+  oc <- head <$> nodeAttr ad (path2dn ad path) "objectCategory"
   let nodes = map (T.unpack . rdnOf) chs
---  attrs <- nodeAttrs ad path ["objectCategory"]
---  let objCat = toObjCat cat
---      cat = lastElem $ head $ fromJust $ getAttr "objectCategory" attrs
+      objCat = toObjCat oc
   mapM_ (\x -> createDirectoryIfMissing True (tmp </> tail path </> x)) nodes
-  refreshHooks st Default path
+  refreshHooks st objCat path
+
+toObjCat :: Val -> ObjectCategory
+toObjCat v = case v' of
+  "CN=Person" -> Person
+  _ -> Default
+  where v' = BC.takeWhile (/=',') v
 
 fromStatus :: FileStatus -> FileStat
 fromStatus st =
@@ -260,7 +267,7 @@ changeUserPassword :: State -> FilePath -> HT -> ByteString -> FileOffset -> IO 
 changeUserPassword State{..} path _ content offset | content == BS.empty = do
                                                        return $ Right $ fromIntegral $ BS.length content
                                                    | otherwise = do
---                                                       setPass ad (takeDirectory path) (T.decodeUtf8 content)
+                                                       adSetUserPass ad (path2dn ad . takeDirectory $ path) (T.decodeUtf8 content)
                                                        return $ Right $ fromIntegral $ BS.length content
 
 writeAttrs :: State -> FilePath -> HT -> ByteString -> FileOffset -> IO (Either Errno ByteCount)

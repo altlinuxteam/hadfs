@@ -34,18 +34,17 @@ resolver: lts-13.9
 #  - wai
 packages:
 - .
+  #- ../adldap
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 extra-deps:
-        #- git: file:///home/omg/work/dev/hadfs/adldap/
-        #  commit: eee0dde9342309d2e11407b62f27911eb7f5617c
 - github: omgbebebe/ldap-haskell
   commit: 206f747b50e785c67466ab977368842ce994995c
 - github: omgbebebe/hfuse
   commit: 5224e75d42796d52287b3e1517b80113990933eb
 - github: omgbebebe/adldap
-  commit: 3c72b3094b1171358d8c6218968b4c700269c4f3
+  commit: fe88b16b86efdb057028cc5ff8aaae949adf4b9e
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
