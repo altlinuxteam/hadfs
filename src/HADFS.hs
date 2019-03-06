@@ -1,102 +1,69 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-module HADFS.FS where
+{-# LANGUAGE RecordWildCards #-}
+module HADFS where
 
+import ADLDAP
+import ADLDAP.Types
+import ADLDAP.Utils
 import Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString as BS
-import Control.Concurrent.STM.TVar
-import Control.Monad.STM
-import Control.Monad
-import Control.Monad.Reader
-import Foreign.C.Error
-import System.PosixCompat.Types
-import System.PosixCompat.Files
-import System.IO
-import System.FilePath.Posix
-import System.Directory
-import Control.Concurrent
-import Data.Maybe
-import Data.Either
-import System.Fuse
-import Data.Text (unpack)
-import Data.List (isPrefixOf)
-import HADFS.AD
-import qualified Data.Map.Strict as M
+--import Control.Monad.Reader
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import HADFS.AD.Types
-import qualified HADFS.AD
-import HADFS.Types
-import HADFS.Utils
-import HADFS.LDIF.Utils
-import HADFS.LDIF.Types
+import System.PosixCompat.Types
+import System.PosixCompat.Files
+import System.FilePath.Posix
+import System.Directory
+import qualified Data.Map.Strict as M
+import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM
 import Control.Exception.Base
+import HADFS.Types
+import System.Fuse
+import Data.Maybe
+import Data.Either
+import Data.List (isPrefixOf)
+import Control.Monad
+import Debug.Trace
 
 type HT = ()
-
 type FSMap = M.Map FilePath FileStat
-
 type FSError = (Errno, String)
+
+data ObjectCategory
+  = Person
+  | Default
+  deriving (Eq, Show)
 
 noErr :: FSError
 noErr = (eOK, "")
 
-type App = ReaderT State IO
-type Logger = (String -> IO ())
-instance Show Logger where
-  show _ = "Logger func"
+data State = State{ad   :: !ADCtx
+                  ,logF :: !(String -> IO ())
+                  ,lastError :: TVar FSError
+                  ,tmp :: FilePath
+                  }
 
-data Config = Config{adHost     :: !String
-                    ,adPort     :: !Int
-                    ,adRealm    :: !String
-                    ,mountpoint :: !FilePath
-                    ,cachePath  :: !FilePath
-                    ,logF       :: !Logger
-                    }
-  deriving Show
+instance Show (String -> IO()) where
+  show _ = "logger"
 
-data State = State {config :: !Config
-                   ,ad :: !AD
-                   ,lastError :: TVar FSError
-                   ,tmp :: FilePath
-                   }
-  deriving Show
-instance Show (TVar FSError) where
-  show _ = "FSError"
-
-init :: Config -> IO ()
-init conf = do
-  let prog = "hadfs"
-      mp = mountpoint conf
-      cache = cachePath conf
-      host = adHost conf
-      port = adPort conf
-      realm = adRealm conf
-      log = logF conf
-      cacheDir = cache </> ".cache-" ++ host
+--hadfsInit :: Realm -> Host -> Port -> FilePath -> FilePath -> Logger -> IO ()
+hadfsInit :: String -> String -> Int -> FilePath -> FilePath -> Logger -> IO ()
+hadfsInit realm host port mountpoint cacheDir logF = do
+  ad <- adInit realm' host port
+  errorState <- newTVarIO (eOK, "")
+  let st = State ad putStrLn errorState cacheDir
       lePath = cacheDir </> ".lasterror"
 
-  log "Initialize AD..."
-  ad <- HADFS.AD.initAD realm host port
-  cwd <- getCurrentDirectory
-  errorState <- newTVarIO (eOK, "")
-  log $ "Create cache directory: " ++ cacheDir
   createDirectoryIfMissing False cacheDir
-  log "Populate cache"
   writeFile (cacheDir </> ".dummy") ""
   writeFile lePath "bebebe"
   createDirectoryIfMissing False (cacheDir </> "CN=Configuration")
   createDirectoryIfMissing False (cacheDir </> "CN=Schema,CN=Configuration")
-  fuseRun prog [mp,"-f", "-o", "default_permissions,auto_unmount","-o", "fsname=" ++ prog, "-o", "subtype=" ++ host] (adFSOps (State conf ad errorState cacheDir)) (exceptionHandler errorState lePath)
 
-exceptionHandler :: TVar FSError -> FilePath -> (SomeException -> IO Errno)
-exceptionHandler lerr lePath e = do
-  print e
-  atomically $ writeTVar lerr (eFAULT, show e)
-  writeFile lePath (show e)
-  return eFAULT
+  fuseRun "hadfs" ["./mnt", "-o", "default_permissions,auto_unmount", "-f", "-o", "subtype=" ++ host] (adFSOps st) (exceptionHandler errorState lePath)
+  where realm' = T.pack realm
 
 adFSOps :: State -> FuseOperations HT
 adFSOps s = defaultFuseOps { fuseGetFileStat = getFileStat s
@@ -118,6 +85,13 @@ adFSOps s = defaultFuseOps { fuseGetFileStat = getFileStat s
                            , fuseSetFileTimes = setFTime s
                            , fuseRename = mv s
                            }
+
+exceptionHandler :: TVar FSError -> FilePath -> (SomeException -> IO Errno)
+exceptionHandler lerr lePath e = do
+  atomically $ writeTVar lerr (eFAULT, show e)
+  writeFile lePath (show e)
+  putStrLn $ show e
+  return eFAULT
 
 getFileStat :: State -> FilePath -> IO (Either Errno FileStat)
 getFileStat State{..} path | takeFileName path == ".refresh" = do
@@ -148,8 +122,8 @@ refreshHooks st@State{..} Person path = do
 refreshHooks st@State{..} Default path = do
   ctx <- getFuseContext
 --  attrs <- nodeAttrs ad path ["*", "+", "nTSecurityDescriptor"]
-  record <- nodeRec ad path ["*", "+"]
-  let hooks = [(cachePath </> ".attributes", T.unpack (recordToLDIF record))
+  record <- recordOf ad path
+  let hooks = [(cachePath </> ".attributes", T.unpack (unTagged $ toLdif [record]))
               ] <> if path == "/" then [(cachePath </> ".lasterror", "")] else []
   mapM_ (uncurry createIfNotDeleted) hooks
   where cachePath = tmp </> tail path
@@ -165,12 +139,13 @@ createIfNotDeleted path content = do
 
 refresh :: State -> FilePath -> IO ()
 refresh st@State{..} path = do
-  nodes <- nodesAt ad path
-  attrs <- nodeAttrs ad path ["objectCategory"]
-  let objCat = toObjCat cat
-      cat = lastElem $ head $ fromJust $ getAttr "objectCategory" attrs
-  mapM_ (\(x, cat) -> createDirectoryIfMissing True (tmp </> tail path </> x)) nodes
-  refreshHooks st objCat path
+  chs <- childrenOf' ad path
+  let nodes = map (T.unpack . rdnOf) chs
+--  attrs <- nodeAttrs ad path ["objectCategory"]
+--  let objCat = toObjCat cat
+--      cat = lastElem $ head $ fromJust $ getAttr "objectCategory" attrs
+  mapM_ (\x -> createDirectoryIfMissing True (tmp </> tail path </> x)) nodes
+  refreshHooks st Default path
 
 fromStatus :: FileStatus -> FileStat
 fromStatus st =
@@ -199,23 +174,15 @@ readD st@State{..} path = do
   stats <- mapM (\x -> fromStatus <$> getFileStatus (tmp </> tail path </> x)) content
   return $ Right $ zip content stats
 
---readD _ _ = return (Left (eNOENT))
-
 openF :: State -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno HT)
 openF State{..} path mode flags = return $ Right ()
 
-readF :: State -> FilePath -> HT -> ByteCount -> FileOffset -> IO (Either Errno B.ByteString)
+readF :: State -> FilePath -> HT -> ByteCount -> FileOffset -> IO (Either Errno BS.ByteString)
 readF st@State{..} path _ byteCount offset = do
   putStrLn $ "read file:" ++ path
-  content <- B.readFile (tmp </> tail path)
+  content <- BS.readFile (tmp </> tail path)
   return $ Right content
-{--
-  withFile (tmp </> tail path) ReadMode
-    (\fh -> do
-        content <- B.hGetContents fh
-        return $ Right content
-    )
---}
+
 getFileSystemStats :: State -> String -> IO (Either Errno FileSystemStats)
 getFileSystemStats State{..} str =
   return $ Right $ FileSystemStats
@@ -230,7 +197,6 @@ getFileSystemStats State{..} str =
 
 unlink :: State -> FilePath -> IO Errno
 unlink st@State{..} path = do
-  traceLog $ "unlink: " ++ show path
   renameFile cachePath newName
   return eOK
   where cachePath = tmp </> tail path
@@ -240,7 +206,7 @@ unlink st@State{..} path = do
 
 rmdir :: State -> FilePath -> IO Errno
 rmdir st@State{..} path = do
-  deleteNode ad path
+  delRec ad $ path2dn ad path
   removeDirectoryRecursive cachePath
   return eOK
   where cachePath = tmp </> tail path
@@ -257,21 +223,18 @@ create :: State -> FilePath -> EntryType -> FileMode -> DeviceID -> IO Errno
 create st@State{..} path RegularFile mode _ | takeFileName path == ".refresh" = cleanCacheDir st path
                                             | takeFileName path == ".attributes" = do
                                                 let cacheDir = tmp </> tail (takeDirectory path)
-                                                traceLog "create .attributes"
                                                 files <- listDirectory cacheDir
                                                 case files of
                                                   [] -> do
-                                                    writeFile (tmp </> tail path) "dn: new record\n"
+                                                    writeFile (tmp </> tail path) ""
                                                     return eOK
                                                   _ -> return eACCES
                                             | ".search" `isPrefixOf` takeFileName path = do
                                                 let cacheDir = tmp </> tail (takeDirectory path)
-                                                traceLog "create .search handler"
                                                 writeFile (cacheDir </> takeFileName path) ""
                                                 return eOK
                                             | ".chpwd" == takeFileName path = do
                                                 let cacheDir = tmp </> tail (takeDirectory path)
-                                                traceLog $ show path ++ " created"
                                                 writeFile (cacheDir </> takeFileName path) ""
                                                 return eOK
                                             | otherwise = return eACCES
@@ -284,7 +247,6 @@ setFTime st path _ _ | takeFileName path == ".refresh" = cleanCacheDir st path
 setFSize :: State -> FilePath -> FileOffset -> IO Errno
 setFSize st@State{..} path offset | takeFileName path == ".refresh" = cleanCacheDir st path
                                   | otherwise = do
-                                      traceLog $ "setFSize: " ++ path ++ " (" ++ show offset ++ ")"
                                       return eOK
 
 write :: State -> FilePath -> HT -> ByteString -> FileOffset -> IO (Either Errno ByteCount)
@@ -296,64 +258,51 @@ write st@State{..} path _ content offset | takeFileName path == ".attributes" = 
 
 changeUserPassword :: State -> FilePath -> HT -> ByteString -> FileOffset -> IO (Either Errno ByteCount)
 changeUserPassword State{..} path _ content offset | content == BS.empty = do
-                                                       traceLog "empty password"
                                                        return $ Right $ fromIntegral $ BS.length content
                                                    | otherwise = do
-                                                       traceLog $ "change password for " ++ show (takeDirectory path)
-                                                       setPass ad (takeDirectory path) (T.decodeUtf8 content)
+--                                                       setPass ad (takeDirectory path) (T.decodeUtf8 content)
                                                        return $ Right $ fromIntegral $ BS.length content
 
 writeAttrs :: State -> FilePath -> HT -> ByteString -> FileOffset -> IO (Either Errno ByteCount)
 writeAttrs st@State{..} path _ content offset = do
-  traceLog $ "write attributes to:" ++ path ++ " with offset: " ++ show offset ++ " content: " ++ show content
   oldCont <- BS.readFile cachePath
---  traceLog $ show $ fromLDIF (T.decodeUtf8 oldCont)
---  traceLog $ show $ fromLDIF (T.decodeUtf8 content)
-  let diff = T.encodeUtf8 $ T.unlines $ modopToLDIF $ cmp oldRec newRec
-      oldRec = head $ fromRight [] $ fromLDIF (T.decodeUtf8 oldCont)
+  putStrLn $ show oldCont
+  putStrLn $ show content
+  let old = head $ fromLdifBS ad oldCont
+      new = head $ case offset of
+                     0 -> fromLdifBS ad content
+                     x -> fromLdifBS ad $ BS.take (fromIntegral offset) oldCont <> content <> BS.drop (fromIntegral offset + contentLength) oldCont
       contentLength = fromIntegral $ BS.length content
-      newRec = case offset of
-                 0 -> head $ fromRight [] $ fromLDIF (T.decodeUtf8 content)
-                 x -> head $ fromRight [] $ fromLDIF (T.decodeUtf8 (
-                                                     BS.take (fromIntegral offset) oldCont `BS.append` content `BS.append` BS.drop (fromIntegral offset + contentLength) oldCont)
-                                                     )
-      modOp = cmp oldRec newRec
---  traceLog $ "oldRec: " ++ (show oldRec)
---  traceLog $ "newRec: " ++ (show newRec)
-  traceLog $ "cmp: " ++ show (cmp oldRec newRec)
---  traceLog $ "diff: " ++ (show diff)
-  case modOp of
-    CreateRec _ _ -> add ad [modOp]
-    _ -> modify ad [modOp]
-
---  BS.writeFile (cachePath <.> ".change") diff
+      modOps = cmp old new
+  if oldCont == BS.empty
+    then newRec ad $ new {dn = path2dn ad nodePath}
+    else modRec ad modOps
+  removeFile $ cachePath -- it's really needed?
   return $ Right $ fromIntegral $ BS.length content
   where cachePath = tmp </> tail path
+        nodePath = tmp </> takeDirectory path
 
 mkdir :: State -> FilePath -> FileMode -> IO Errno
 mkdir st@State{..} path mode = do
-  traceLog $ "mkdir: " ++ path
   createDirectoryIfMissing True (tmp </> tail path)
   return eOK
 
 searchHandler :: State -> FilePath -> HT -> ByteString -> FileOffset -> IO (Either Errno ByteCount)
 searchHandler st@State{..} path _ content offset = do
-  traceLog $ "handle search for: " ++ path
-  res <- search ad (takeDirectory path) (T.decodeUtf8 content)
-  let searchRes = T.encodeUtf8 $ T.unlines $ map recordToLDIF res
-  traceLog $ "write content of: " ++ cachePath
+  res <- adSearchReq ad dn' (T.decodeUtf8 content)
+  let searchRes = toLdifBS res
   BS.writeFile cachePath content
-  traceLog $ "write results to: " ++ cacheDir
---  traceLog $ "results: " ++ (show searchRes)
   BS.writeFile (cachePath <.> ".result") searchRes
   return $ Right $ fromIntegral $ BS.length content
   where cacheDir = tmp </> tail (takeDirectory path)
         cachePath = cacheDir </> takeFileName path
+        dn' = path2dn ad . takeDirectory $ path
 
 mv :: State -> FilePath -> FilePath -> IO Errno
 mv State{..} from to = do
-  traceLog $ "move " ++ from ++ " to " ++ to
-  moveNode ad from to
+  movRec ad f t
   removeDirectoryRecursive cacheDir
   return eOK
   where cacheDir = tmp </> tail from
+        f = path2dn ad from
+        t = path2dn ad to

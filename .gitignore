@@ -1,6 +1,5 @@
 .stack-work/
 *~
-*#
-*_flymake.hs
-.cache*/
 mnt/*
+tmp/*
+.cache-*/

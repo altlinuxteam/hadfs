@@ -2,7 +2,6 @@ cabal-version: 1.12
 name:           hadfs
 version:        0.1.0.0
 description:    Please see the README on GitHub at <https://github.com/omgbebebe/hadfs#readme>
-category:       Tools
 homepage:       https://github.com/omgbebebe/hadfs#readme
 bug-reports:    https://github.com/omgbebebe/hadfs/issues
 author:         Sergey Bubnov
@@ -21,35 +20,22 @@ source-repository head
 
 library
   exposed-modules:
-                  HADFS.AD
-                , HADFS.AD.Types
-                , HADFS.FS
-                , HADFS.LDIF.Parser
-                , HADFS.LDIF.Types
-                , HADFS.LDIF.Utils
-                , HADFS.Types
-                , HADFS.Utils
+      HADFS
+      HADFS.Types
   hs-source-dirs:
       src
   build-depends:
-                base >=4.7 && <5
-              , asn1-parse
-              , asn1-encoding
-              , asn1-types
-              , attoparsec
-              , base64-bytestring
-              , binary
-              , bytestring
-              , containers
-              , directory
-              , filepath
-              , HFuse >= 0.2.5
-	      , LDAP >= 0.6.12
-              , mtl
-              , safe-exceptions
-              , stm
-              , text
-              , unix-compat
+      HFuse >=0.2.5
+    , adldap
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , directory
+    , filepath
+    , mtl
+    , stm
+    , text
+    , unix-compat
   default-language: Haskell2010
 
 executable hadfs-exe
@@ -57,11 +43,15 @@ executable hadfs-exe
   hs-source-dirs:
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends: base >=4.7 && <5
-               , filepath
-               , directory
-               , hadfs
-              
+  build-depends:
+      HFuse >=0.2.5
+    , adldap
+    , base >=4.7 && <5
+    , directory
+    , filepath
+    , hadfs
+    , mtl
+    , text
   default-language: Haskell2010
 
 test-suite hadfs-test
@@ -71,6 +61,12 @@ test-suite hadfs-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      HFuse >=0.2.5
+    , adldap
+    , base >=4.7 && <5
+    , directory
+    , filepath
     , hadfs
+    , mtl
+    , text
   default-language: Haskell2010
