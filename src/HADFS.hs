@@ -233,14 +233,13 @@ cleanCacheDir State{..} path = do
 -- create operations
 create :: State -> FilePath -> EntryType -> FileMode -> DeviceID -> IO Errno
 create st@State{..} path RegularFile mode _ | takeFileName path == ".refresh" = cleanCacheDir st path
-                                            | takeFileName path == ".attributes" = do
+                                            | takeFileName path == ".attributes" || takeFileName path == ".attributes.json" = do
                                                 let cacheDir = tmp </> tail (takeDirectory path)
-                                                files <- listDirectory cacheDir
-                                                case files of
-                                                  [] -> do
-                                                    writeFile (tmp </> tail path) ""
-                                                    return eOK
-                                                  _ -> return eACCES
+                                                exists <- doesFileExist path
+                                                if not exists
+                                                  then do writeFile (tmp </> tail path) ""
+                                                          return eOK
+                                                  else return eACCES
                                             | ".search" `isPrefixOf` takeFileName path = do
                                                 let cacheDir = tmp </> tail (takeDirectory path)
                                                 writeFile (cacheDir </> takeFileName path) ""
@@ -290,7 +289,7 @@ writeAttrs st@State{..} path _ content offset mode = do
   if oldCont == BS.empty
     then newRec ad $ new {dn = path2dn ad nodePath}
     else modRec ad modOps
---  removeFile $ cachePath -- is it really needed?
+  refresh st nodePath
   return $ Right $ fromIntegral $ BS.length content
   where cachePath = tmp </> tail path
         nodePath = tmp </> takeDirectory path
