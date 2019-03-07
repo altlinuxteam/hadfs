@@ -306,8 +306,10 @@ searchHandler :: State -> FilePath -> HT -> ByteString -> FileOffset -> IO (Eith
 searchHandler st@State{..} path _ content offset = do
   res <- adSearchReq ad dn' (T.decodeUtf8 content)
   let searchRes = toLdifBS res
+      searchResJson = T.encodeUtf8 $ T.unlines $ map toJson res
   BS.writeFile cachePath content
   BS.writeFile (cachePath <.> ".result") searchRes
+  BS.writeFile (cachePath <.> ".result.json") searchResJson
   return $ Right $ fromIntegral $ BS.length content
   where cacheDir = tmp </> tail (takeDirectory path)
         cachePath = cacheDir </> takeFileName path
