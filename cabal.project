@@ -1,0 +1,3 @@
+packages:	libs/adldap
+		libs/adldap/libs/ldap-haskell
+		./

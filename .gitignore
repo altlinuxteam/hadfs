@@ -3,3 +3,5 @@
 mnt/*
 tmp/*
 .cache-*/
+dist-newstyle/
+.ghc.environment.*

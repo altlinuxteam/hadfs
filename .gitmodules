@@ -1,0 +1,3 @@
+[submodule "libs/adldap"]
+	path = libs/adldap
+	url = https://github.com/omgbebebe/adldap.git
