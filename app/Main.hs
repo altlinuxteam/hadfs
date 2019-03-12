@@ -22,7 +22,8 @@ main = do
   let (Opts mp h p) = parseOpts progName args
       mountpoint = if head mp == '/' then mp else cwd </> mp
       logger = putStrLn
-      domain = "domain.alt"
+      fqdn = h
+      domain = tail . dropWhile (/='.') $ fqdn
       cacheDir = cwd </> (".cache-" <> domain)
 
   hadfsInit domain h p mountpoint cacheDir logger
