@@ -6,6 +6,7 @@ import HADFS
 import System.Directory
 import System.Environment (getProgName, getArgs)
 import System.FilePath
+import Network.Socket
 
 data Opts = Opts FilePath String Int deriving Show
 
@@ -20,10 +21,18 @@ main = do
   progName <- getProgName
   cwd <- getCurrentDirectory
   let (Opts mp h p) = parseOpts progName args
-      mountpoint = if head mp == '/' then mp else cwd </> mp
+  domain <- tail . dropWhile (/='.') <$> getFQDN h
+
+  let mountpoint = if head mp == '/' then mp else cwd </> mp
       logger = putStrLn
-      fqdn = h
-      domain = tail . dropWhile (/='.') $ fqdn
       cacheDir = cwd </> (".cache-" <> domain)
 
   hadfsInit domain h p mountpoint cacheDir logger
+
+getFQDN :: String -> IO String
+getFQDN h = do
+  addr:_ <- getAddrInfo (Just hints) (Just h) Nothing
+  case addrCanonName addr of
+    Nothing -> error $ "cannot get FQDN for " ++ h
+    Just h' -> return h'
+ where hints = defaultHints { addrFlags = [AI_CANONNAME] }

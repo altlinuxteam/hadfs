@@ -7,5 +7,5 @@ cd hadfs
 git submodule update --init --recursive
 cabal new-build
 mkdir ./mnt
-cabal new-run hadfs-exe -- ./mnt dc0.domain.alt
+cabal new-run hadfs-exe -- ./mnt dc0.domain.alt # or just `dc0` without domain
 ```
