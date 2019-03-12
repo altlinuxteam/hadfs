@@ -55,8 +55,8 @@ instance Show (String -> IO()) where
 
 --hadfsInit :: Realm -> Host -> Port -> FilePath -> FilePath -> Logger -> IO ()
 hadfsInit :: String -> String -> Int -> FilePath -> FilePath -> Logger -> IO ()
-hadfsInit realm host port mountpoint cacheDir logF = do
-  ad <- adInit realm' host port
+hadfsInit domain host port mountpoint cacheDir logF = do
+  ad <- adInit domain' host port
   errorState <- newTVarIO (eOK, "")
   let st = State ad putStrLn errorState cacheDir
       lePath = cacheDir </> ".lasterror"
@@ -68,8 +68,8 @@ hadfsInit realm host port mountpoint cacheDir logF = do
   createDirectoryIfMissing False (cacheDir </> "CN=Configuration")
   createDirectoryIfMissing False (cacheDir </> "CN=Schema,CN=Configuration")
 
-  fuseRun prog ["./mnt", "-o", "default_permissions,auto_unmount", "-f", "-o", "subtype=" ++ host, "-o", "fsname=" ++ prog] (adFSOps st) (exceptionHandler errorState lePath)
-  where realm' = T.pack realm
+  fuseRun prog [mountpoint, "-o", "default_permissions,auto_unmount", "-f", "-o", "subtype=" ++ host, "-o", "fsname=" ++ prog] (adFSOps st) (exceptionHandler errorState lePath)
+  where domain' = T.pack domain
 
 adFSOps :: State -> FuseOperations HT
 adFSOps s = defaultFuseOps { fuseGetFileStat = getFileStat s
