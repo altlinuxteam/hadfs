@@ -9,3 +9,10 @@ cabal new-build
 mkdir ./mnt
 cabal new-run hadfs-exe -- ./mnt dc0.domain.alt # or just `dc0` without domain
 ```
+
+or you can use `stack`
+
+```sh
+stack build
+stack run ./mnt dc0
+```
