@@ -68,7 +68,12 @@ hadfsInit domain host port mountpoint cacheDir logF = do
   createDirectoryIfMissing False (cacheDir </> "CN=Configuration")
   createDirectoryIfMissing False (cacheDir </> "CN=Schema,CN=Configuration")
 
-  fuseRun prog [mountpoint, "-o", "default_permissions,auto_unmount", "-f", "-o", "subtype=" ++ host, "-o", "fsname=" ++ prog] (adFSOps st) (exceptionHandler errorState lePath)
+  fuseRun prog [mountpoint
+               ,"-o", "default_permissions,auto_unmount"
+               ,"-o", "subtype=" ++ host, "-o", "fsname=" ++ prog
+ --              ,"-o", "big_writes"
+               ,"-f"
+               ] (adFSOps st) (exceptionHandler errorState lePath)
   where domain' = T.pack domain
 
 adFSOps :: State -> FuseOperations HT
@@ -278,8 +283,10 @@ changeUserPassword State{..} path _ content offset | content == BS.empty = do
 writeAttrs :: State -> FilePath -> HT -> ByteString -> FileOffset -> AttrWriteMode -> IO (Either Errno ByteCount)
 writeAttrs st@State{..} path _ content offset mode = do
   oldCont <- BS.readFile cachePath
-  putStrLn $ show oldCont
-  putStrLn $ show content
+--  putStrLn $ BC.unpack oldCont
+--  putStrLn $ BC.unpack content
+--  putStrLn $ "offset: " ++ show offset ++ "\tlen: " ++ (show $ BC.length content)
+
   let old = head $ toRecFunc oldCont
       new = head $ case offset of
                      0 -> toRecFunc content
