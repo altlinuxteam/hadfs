@@ -292,7 +292,7 @@ writeAttrs st@State{..} path _ content offset mode = do
                      0 -> toRecFunc content
                      x -> toRecFunc $ BS.take (fromIntegral offset) oldCont <> content <> BS.drop (fromIntegral offset + contentLength) oldCont
       contentLength = fromIntegral $ BS.length content
-      modOps = cmp old new
+      modOps = cmp ad old new
   if oldCont == BS.empty
     then newRec ad $ new {dn = path2dn ad nodePath}
     else modRec ad modOps
