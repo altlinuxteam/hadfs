@@ -95,7 +95,11 @@ adFSOps s = defaultFuseOps { fuseGetFileStat = getFileStat s
                            -- other
                            , fuseSetFileTimes = setFTime s
                            , fuseRename = mv s
+                           , fuseInit = fInit s
                            }
+
+fInit State{..} = do
+  logF "FUSE loop started"
 
 exceptionHandler :: TVar FSError -> FilePath -> (SomeException -> IO Errno)
 exceptionHandler lerr lePath e = do
@@ -108,8 +112,9 @@ getFileStat :: State -> FilePath -> IO (Either Errno FileStat)
 getFileStat State{..} path | takeFileName path == ".refresh" = do
                                status <- getFileStatus (tmp </> ".dummy")
                                return $ Right $ fromStatus status
-getFileStat State{..} path =
-  doesPathExist cachePath >>= \x ->
+getFileStat st@State{..} path = do
+  refresh st $ takeDirectory path
+  x <- doesPathExist cachePath
   if x then do
     status <- getFileStatus cachePath
     return $ Right $ fromStatus status
