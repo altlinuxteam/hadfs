@@ -21,6 +21,7 @@ import qualified Data.Map.Strict as M
 import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM
 import Control.Exception.Base
+import Control.Monad (when)
 import HADFS.Types
 import System.Fuse
 import Data.Maybe
@@ -113,9 +114,10 @@ getFileStat State{..} path | takeFileName path == ".refresh" = do
                                status <- getFileStatus (tmp </> ".dummy")
                                return $ Right $ fromStatus status
 getFileStat st@State{..} path = do
-  refresh st $ takeDirectory path
   x <- doesPathExist cachePath
-  if x then do
+  when (not x) $ refresh st $ takeDirectory path
+  x' <- doesPathExist cachePath
+  if x' then do
     status <- getFileStatus cachePath
     return $ Right $ fromStatus status
   else return $ Left eNOENT
