@@ -62,6 +62,7 @@ hadfsInit domain host port mountpoint cacheDir logF = do
   let st = State ad putStrLn errorState cacheDir
       lePath = cacheDir </> ".lasterror"
       prog = "hadfs"
+      host'' = T.unpack $ if T.isSuffixOf domain' host' then host' else host' <> "." <> domain'
 
   createDirectoryIfMissing False cacheDir
   writeFile (cacheDir </> ".dummy") ""
@@ -71,11 +72,12 @@ hadfsInit domain host port mountpoint cacheDir logF = do
 
   fuseRun prog [mountpoint
                ,"-o", "default_permissions,auto_unmount"
-               ,"-o", "subtype=" ++ host, "-o", "fsname=" ++ prog
+               ,"-o", "subtype=" ++ host'', "-o", "fsname=" ++ prog
  --              ,"-o", "big_writes"
                ,"-f"
                ] (adFSOps st) (exceptionHandler errorState lePath)
   where domain' = T.pack domain
+        host' = T.pack host
 
 adFSOps :: State -> FuseOperations HT
 adFSOps s = defaultFuseOps { fuseGetFileStat = getFileStat s
