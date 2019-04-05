@@ -25,7 +25,7 @@ library
   hs-source-dirs:
       src
   build-depends:
-      HFuse >=0.2.5
+      HFuse >=0.2.5.1
     , adldap
     , base >=4.7 && <5
     , bytestring

@@ -1,3 +1,6 @@
 [submodule "libs/adldap"]
 	path = libs/adldap
 	url = https://github.com/omgbebebe/adldap.git
+[submodule "libs/hfuse"]
+	path = libs/hfuse
+	url = https://github.com/omgbebebe/hfuse.git

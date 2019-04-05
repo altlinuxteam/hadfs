@@ -1,3 +1,4 @@
 packages:	libs/adldap
-		libs/adldap/libs/ldap-haskell
-		./
+			libs/hfuse
+			libs/adldap/libs/ldap-haskell
+			./
