@@ -140,14 +140,17 @@ refreshHooks st@State{..} Person path = do
   where cachePath = tmp </> tail path
 
 refreshHooks st@State{..} Default path = do
-  ctx <- getFuseContext
+--  ctx <- getFuseContext
 --  attrs <- nodeAttrs ad path ["*", "+", "nTSecurityDescriptor"]
-  record <- recordOf ad path
-  let hooks = [(cachePath </> ".attributes", T.unpack (unTagged $ toLdif [record]))
-              ,(cachePath </> ".attributes.json", T.unpack (toJsonPP record))
-              ] <> if path == "/" then [(cachePath </> ".lasterror", "")] else []
-  mapM_ (uncurry createIfNotDeleted) hooks
-  where cachePath = tmp </> tail path
+  res <- recordOf ad path
+  case res of
+    Left e -> error $ show e
+    Right record -> do
+      let hooks = [(cachePath </> ".attributes", T.unpack (unTagged $ toLdif [record]))
+                  ,(cachePath </> ".attributes.json", T.unpack (toJsonPP record))
+                  ] <> if path == "/" then [(cachePath </> ".lasterror", "")] else []
+      mapM_ (uncurry createIfNotDeleted) hooks
+        where cachePath = tmp </> tail path
 
 createIfNotDeleted :: FilePath -> String -> IO ()
 createIfNotDeleted path content = do
@@ -160,12 +163,16 @@ createIfNotDeleted path content = do
 
 refresh :: State -> FilePath -> IO ()
 refresh st@State{..} path = do
-  chs <- childrenOf' ad path
-  oc <- head <$> nodeAttr ad (path2dn ad path) "objectCategory"
-  let nodes = map (T.unpack . rdnOf) chs
-      objCat = toObjCat oc
-  mapM_ (\x -> createDirectoryIfMissing True (tmp </> tail path </> x)) nodes
-  refreshHooks st objCat path
+  logF $ "refreshing: " ++ path
+  oc <- nodeAttr ad (path2dn ad path) "objectCategory"
+  case oc of
+    [] -> return ()
+    oc -> do
+      chs <- childrenOf' ad path
+      let nodes = map (T.unpack . rdnOf) chs
+          objCat = toObjCat $ head oc
+      mapM_ (\x -> createDirectoryIfMissing True (tmp </> tail path </> x)) nodes
+      refreshHooks st objCat path
 
 toObjCat :: Val -> ObjectCategory
 toObjCat v = case v' of
@@ -249,9 +256,10 @@ create :: State -> FilePath -> EntryType -> FileMode -> DeviceID -> IO Errno
 create st@State{..} path RegularFile mode _ | takeFileName path == ".refresh" = cleanCacheDir st path
                                             | takeFileName path == ".attributes" || takeFileName path == ".attributes.json" = do
                                                 let cacheDir = tmp </> tail (takeDirectory path)
-                                                exists <- doesFileExist path
+                                                    cacheFile = cacheDir </> takeFileName path
+                                                exists <- doesFileExist cacheFile
                                                 if not exists
-                                                  then do writeFile (tmp </> tail path) ""
+                                                  then do writeFile cacheFile ""
                                                           return eOK
                                                   else return eACCES
                                             | ".search" `isPrefixOf` takeFileName path = do
@@ -292,9 +300,6 @@ changeUserPassword State{..} path _ content offset | content == BS.empty = do
 writeAttrs :: State -> FilePath -> HT -> ByteString -> FileOffset -> AttrWriteMode -> IO (Either Errno ByteCount)
 writeAttrs st@State{..} path _ content offset mode = do
   oldCont <- BS.readFile cachePath
---  putStrLn $ BC.unpack oldCont
---  putStrLn $ BC.unpack content
---  putStrLn $ "offset: " ++ show offset ++ "\tlen: " ++ (show $ BC.length content)
 
   let old = head $ toRecFunc oldCont
       new = head $ case offset of
