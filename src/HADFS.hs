@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE CPP #-}
 module HADFS where
 
 import ADLDAP
@@ -29,6 +30,10 @@ import Data.Either
 import Data.List (isPrefixOf)
 import Control.Monad
 import Debug.Trace
+#if MIN_VERSION_base(4,6,0)
+import Control.Applicative
+import Data.Semigroup ((<>))
+#endif
 
 type HT = ()
 type FSMap = M.Map FilePath FileStat

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, CPP #-}
 module Main where
 
 import Data.Maybe (fromMaybe)
@@ -7,6 +7,10 @@ import System.Directory
 import System.Environment (getProgName, getArgs)
 import System.FilePath
 import Network.Socket
+#if MIN_VERSION_base(4,6,0)
+import Control.Applicative
+import Data.Semigroup ((<>))
+#endif
 
 data Opts = Opts FilePath String Int deriving Show
 
