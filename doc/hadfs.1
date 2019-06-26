@@ -1,16 +1,16 @@
-.TH HADFS-EXE 1 "hadfs" "Active Directory File System"
+.TH HADFS 1 "hadfs" "Active Directory File System"
 .SH NAME
-hadfs-exe \- mount AD configuration from LDAP as a FUSE tree
+hadfs \- mount AD configuration from LDAP as a FUSE tree
 .SH SYNOPSIS
-.B hadfs-exe
+.B hadfs
 \fBmountpoint\fR \fBhost\fR [\fBport\fR]
 .SH DESCRIPTION
 .PP
-.B hadfs-exe
+.B hadfs
 is a software for mapping \fBActive Directory\fR settings stored in
 \fBLDAP\fR database using \fBFUSE\fR (Filesystem in USErspace).
 .PP
-In order for \fBhadfs-exe\fR to be able to get the configuration, it
+In order for \fBhadfs\fR to be able to get the configuration, it
 must be authorized to do it via Kerberos (using \fBkinit\fR for
 example).
 .TP
@@ -44,7 +44,7 @@ Mount Active Directory domain settings into user-owned directory in
 .EX
 $ \fBmkdir\fR /home/user/ad-settings
 $ \fBkinit\fR administrator@DOMAIN.ALT
-$ \fBhadfs-exe\fR /home/user/ad-settings dc0.domain.alt
+$ \fBhadfs\fR /home/user/ad-settings dc0.domain.alt
 .EE
 .SH SEE ALSO
 .BR kinit (1),
