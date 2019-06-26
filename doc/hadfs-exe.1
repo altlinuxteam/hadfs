@@ -1,0 +1,89 @@
+.TH HADFS-EXE 1 "hadfs" "Active Directory File System"
+.SH NAME
+hadfs-exe \- mount AD configuration from LDAP as a FUSE tree
+.SH SYNOPSIS
+.B hadfs-exe
+\fBmountpoint\fR \fBhost\fR [\fBport\fR]
+.SH DESCRIPTION
+.PP
+.B hadfs-exe
+is a software for mapping \fBActive Directory\fR settings stored in
+\fBLDAP\fR database using \fBFUSE\fR (Filesystem in USErspace).
+.PP
+In order for \fBhadfs-exe\fR to be able to get the configuration, it
+must be authorized to do it via Kerberos (using \fBkinit\fR for
+example).
+.TP
+\fBmountpoint\fR \- user-owned directory to mount filesystem
+.TP
+\fBhost\fR \- hostname of LDAP database
+.TP
+\fBport\fR \- LDAP port (default: \fI389\fR)
+.SH FILES
+LDAP tree elements are represented by directories and their properties
+are represented by text files. You may encounter the following files:
+.TP
+\fB.chpwd\fR - Write-only file for changing user's password.
+.TP
+\fB.attributes\fR - Object attributes as a \fBLDIF\fR file.
+.TP
+\fB.attributes.json\fR - Object attributes as a \fBJSON\fR.
+.TP
+\fB.lasterrror\fR - File stored in catalog where the program was
+started. There is no way to get human-readable error message from the
+file system so this file stores text of last error message.
+.TP
+\fB.refresh\fR - The LDAP tree data is cached locally. You may trigger
+cache update by 'touch .refresh' command invoked in the directory you
+want to update.
+.SH EXAMPLES
+.PP
+Mount Active Directory domain settings into user-owned directory in
+\fI$HOME/ad-settings\fR:
+.PP
+.EX
+$ \fBmkdir\fR /home/user/ad-settings
+$ \fBkinit\fR administrator@DOMAIN.ALT
+$ \fBhadfs-exe\fR /home/user/ad-settings dc0.domain.alt
+.EE
+.SH SEE ALSO
+.BR kinit (1),
+.BR <https://www.altlinux.org/ActiveDirectory/ADFS>
+.SH AUTHOR
+This software is written by Sergey Bubnov.
+Manpage is written by Igor "NIR" Chudov.
+.SH REPORTING BUGS
+Report bugs to: <https://github.com/altlinuxteam/hadfs>
+.SH COPYRIGHT
+Copyright Sergey Bubnov (c) 2019
+Copyright Igor "NIR" Chudov (c) 2019
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following
+      disclaimer in the documentation and/or other materials provided
+      with the distribution.
+
+    * Neither the name of Sergey Bubnov nor the names of other
+      contributors may be used to endorse or promote products derived
+      from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
