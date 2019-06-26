@@ -41,7 +41,7 @@ library
 
   default-language: Haskell2010
 
-executable hadfs-exe
+executable hadfs
   main-is: Main.hs
   hs-source-dirs:
       app
