@@ -1,3 +1,8 @@
 # Changelog for hadfs
 
-## Unreleased changes
+## [Unreleased]
+
+## [0.1.0.0] - 2019-06-26
+### Added
+- Manual page in English.
+
