@@ -7,24 +7,39 @@ import System.Directory
 import System.Environment (getProgName, getArgs)
 import System.FilePath
 import Network.Socket
+import Options.Applicative
 #if MIN_VERSION_base(4,6,0)
 import Control.Applicative
 import Data.Semigroup ((<>))
 #endif
 
-data Opts = Opts FilePath String Int deriving Show
+mountpoint :: Parser FilePath
+mountpoint = argument str (metavar "mountpoint" <> help "Mountpoint for AD LDAP tree")
 
-parseOpts :: String -> [String] -> Opts
-parseOpts _ [mp, h, p] = Opts mp h (read p)
-parseOpts _ [mp, h] = Opts mp h 389
-parseOpts prog _ = error $ "Usage: " ++ prog ++ " <mountpoint> <host> [port]"
+hostname :: Parser String
+hostname = argument str (metavar "host" <> help "Samba DC host name")
 
-main :: IO ()
-main = do
-  args <- getArgs
+ldapport :: Parser Int
+ldapport = argument auto (metavar "port" <> help "LDAP port" <> showDefault <> value 389)
+
+data Opts = Opts {
+    mp :: FilePath
+    , h :: String
+    , p :: Int
+  }
+  deriving (Show)
+
+config :: Parser Opts
+config = Opts <$> mountpoint <*> hostname <*> ldapport
+
+opts :: ParserInfo Opts
+opts = info (config <**> helper)
+  (fullDesc <> progDesc "Mount AD LDAP settings tree as FUSE filesystem" <> header "Active Directory File System")
+
+runner :: Opts -> IO ()
+runner (Opts mp h p) = do
   progName <- getProgName
   cwd <- getCurrentDirectory
-  let (Opts mp h p) = parseOpts progName args
   domain <- tail . dropWhile (/='.') <$> getFQDN h
 
   let mountpoint = if head mp == '/' then mp else cwd </> mp
@@ -32,6 +47,9 @@ main = do
       cacheDir = cwd </> (".cache-" <> domain)
 
   hadfsInit domain h p mountpoint cacheDir logger
+
+main :: IO ()
+main = runner =<< execParser opts
 
 getFQDN :: String -> IO String
 getFQDN h = do
