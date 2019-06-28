@@ -24,10 +24,9 @@ ldapport = argument auto (metavar "port" <> help "LDAP port" <> showDefault <> v
 
 data Opts = Opts {
     mp :: FilePath
-    , h :: String
-    , p :: Int
-  }
-  deriving (Show)
+  , h  :: String
+  , p  :: Int
+  } deriving (Show)
 
 config :: Parser Opts
 config = Opts <$> mountpoint <*> hostname <*> ldapport
