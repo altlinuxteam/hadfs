@@ -1,6 +1,7 @@
 [submodule "libs/adldap"]
 	path = libs/adldap
-	url = https://github.com/omgbebebe/adldap.git
+	url = https://github.com/altlinuxteam/adldap.git
 [submodule "libs/hfuse"]
 	path = libs/hfuse
-	url = https://github.com/omgbebebe/hfuse.git
+	url = https://github.com/altlinuxteam/hfuse.git
+
